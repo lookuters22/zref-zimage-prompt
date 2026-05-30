@@ -10,7 +10,7 @@
 ### 1. Clone this repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/zref-zimage-prompt.git
+git clone https://github.com/lookuters22/zref-zimage-prompt.git
 cd zref-zimage-prompt
 ```
 

@@ -1,48 +1,56 @@
 # Create the GitHub repository (no `gh` CLI required)
 
-`gh` is optional. Use the website + `git` if you do not have GitHub CLI installed.
+Target for this project: **`lookuters22/zref-zimage-prompt`**  
+→ **https://github.com/lookuters22/zref-zimage-prompt**
 
-## 1. Create an empty repo on GitHub
+## Fast path: GitHub API + `scripts/publish_github.ps1`
 
-1. Open **https://github.com/new**
-2. **Repository name:** e.g. `zref-zimage-prompt`
-3. **Public** (or Private)
-4. **Do not** add a README, `.gitignore`, or license (this folder already has them).
-5. Click **Create repository**.
+1. GitHub → **Settings → Developer settings → Personal access tokens**  
+   Create a **classic** token with **`repo`** scope (or fine-grained access to create repos under `lookuters22`).
 
-## 2. Point this project at GitHub and push
+2. In **PowerShell** (repo root):
 
-In **this** project directory (`E:\NODE SAMPLING` or your clone path), run (replace `YOUR_USER`):
+```powershell
+cd "E:\NODE SAMPLING"   # or your clone path
+$env:GITHUB_TOKEN = "ghp_...."   # do not commit; clear after: Remove-Item Env:GITHUB_TOKEN
+.\scripts\publish_github.ps1 -Owner lookuters22
+```
+
+The script calls **`POST https://api.github.com/user/repos`** (repo is created under the **authenticated user**).  
+Your PAT must be for the **`lookuters22`** GitHub account.
+
+If **`lookuters22`** is an **organization** and your token belongs to your personal user, run:
+
+```powershell
+.\scripts\publish_github.ps1 -Owner lookuters22 -IsOrg
+```
+
+That uses **`POST https://api.github.com/orgs/lookuters22/repos`** (needs org permission to create repos).
+
+## Manual: empty repo on the website
+
+1. **https://github.com/new** — Owner **lookuters22**, name **`zref-zimage-prompt`**
+2. Public or Private. **No** README / `.gitignore` / license.
+3. Then:
 
 ```bash
 git branch -M main
-git remote add origin https://github.com/YOUR_USER/zref-zimage-prompt.git
+git remote add origin https://github.com/lookuters22/zref-zimage-prompt.git
 git push -u origin main
 ```
 
-If GitHub shows **SSH** instead:
+## On RunPod — clone and install
 
 ```bash
-git remote add origin git@github.com:YOUR_USER/zref-zimage-prompt.git
-git push -u origin main
-```
-
-## 3. On RunPod — clone and install
-
-```bash
-git clone https://github.com/YOUR_USER/zref-zimage-prompt.git
+git clone https://github.com/lookuters22/zref-zimage-prompt.git
 cd zref-zimage-prompt
 pip install -e .
 cp -r comfy/zref_prompt /workspace/ComfyUI/custom_nodes/
 ```
 
-(Adjust `ComfyUI` path to match your template.)
-
-## Optional: GitHub CLI later
-
-Install [GitHub CLI](https://cli.github.com/), then from the repo root:
+## Optional: GitHub CLI
 
 ```bash
 gh auth login
-gh repo create zref-zimage-prompt --public --source=. --remote=origin --push
+gh repo create lookuters22/zref-zimage-prompt --public --source=. --remote=origin --push
 ```
