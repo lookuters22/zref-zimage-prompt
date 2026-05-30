@@ -2,7 +2,8 @@
 
 Turn a **reference image** into a **natural-language prompt** tuned for **Z-Image / Z-Image Turbo** (DiT + **Qwen3-4B** text encoder): pose, wardrobe, lighting, camera/optics, color grade, and **non-AI-looking** photoreal cues.
 
-**Install (RunPod / ComfyUI / local):** see **[docs/INSTALL.md](docs/INSTALL.md)**.
+**Install (RunPod / ComfyUI / local):** see **[docs/INSTALL.md](docs/INSTALL.md)**.  
+**Create & push this repo to GitHub:** see **[docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md)** (GitHub CLI not required).
 
 ## Features
 
