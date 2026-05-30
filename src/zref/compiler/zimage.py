@@ -1,4 +1,10 @@
-"""VisionSchema → Z-Image natural-language prompt with token budget."""
+"""VisionSchema → Z-Image natural-language prompt with token budget.
+
+Assembles **one narrative** in a fixed order tuned for Qwen-style encoders:
+must-preserve → subjects (pose/limbs first) → camera+shot → place/weather
+→ light+color → realism → optional summary last (so it is trimmed first
+when tokens are tight).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,7 @@ from dataclasses import dataclass
 from zref.compiler import tokenizer_util as _tokutil
 from zref.compiler.presets import Preset, get_preset
 from zref.compiler.realism import naturalize, strip_banned_terms
-from zref.schema import VisionSchema
+from zref.schema import Subject, VisionSchema
 
 
 @dataclass
@@ -18,140 +24,114 @@ class CompiledPrompt:
     token_count: int
 
 
-def _add(sec: list[tuple[int, str]], pr: int, text: str) -> None:
-    t = (text or "").strip()
-    if t:
-        sec.append((pr, t))
+def _reproduction_chunk(schema: VisionSchema) -> str:
+    lines = [f"Must preserve: {x.strip()}." for x in schema.reproduction_critical if x.strip()]
+    return " ".join(lines).strip()
 
 
-def _subject_sections(schema: VisionSchema) -> list[tuple[int, str]]:
-    out: list[tuple[int, str]] = []
-    for i, s in enumerate(schema.subjects):
-        label = f"Person {i + 1}" if s.role in ("", "subject", "primary") else f"{s.role} (figure {i + 1})"
-        p = s.pose
-        pr_pose = p.priority
-        bits = []
-        if p.overall:
-            bits.append(p.overall)
-        if p.torso_angle:
-            bits.append(f"torso {p.torso_angle}")
-        if p.head_tilt:
-            bits.append(f"head {p.head_tilt}")
-        if p.shoulders:
-            bits.append(f"shoulders {p.shoulders}")
-        if p.hips:
-            bits.append(f"hips {p.hips}")
-        if p.legs:
-            bits.append(f"legs {p.legs}")
-        if p.feet:
-            bits.append(f"feet {p.feet}")
-        if p.weight_distribution:
-            bits.append(f"weight {p.weight_distribution}")
-        if p.interaction_with_environment:
-            bits.append(p.interaction_with_environment)
-        if bits:
-            _add(out, pr_pose, f"{label} pose: {', '.join(bits)}.")
+def _subject_paragraph(s: Subject, idx: int) -> str:
+    label = f"Subject {idx + 1}" if s.role in ("", "subject", "primary") else f"{s.role} (figure {idx + 1})"
+    clauses: list[str] = []
 
-        a = s.anatomy
-        abits = [x for x in (a.body_type, a.proportions, a.visible_musculature, a.notes) if x]
-        if abits:
-            _add(out, a.priority, f"{label} body: {'; '.join(abits)}.")
+    p = s.pose
+    if (p.arms_hands_lr or "").strip():
+        clauses.append((p.arms_hands_lr or "").strip())
+    pose_bits = [
+        p.overall,
+        p.torso_angle and f"torso {p.torso_angle}",
+        p.head_tilt and f"head {p.head_tilt}",
+        p.shoulders and f"shoulders {p.shoulders}",
+        p.hips and f"hips {p.hips}",
+        p.legs and f"legs {p.legs}",
+        p.feet and f"feet {p.feet}",
+        p.weight_distribution and f"weight {p.weight_distribution}",
+        p.interaction_with_environment,
+    ]
+    pose_bits = [x for x in pose_bits if x]
+    if pose_bits:
+        clauses.append("Pose: " + "; ".join(pose_bits))
 
-        if s.hands:
-            hb = "; ".join(
-                h.description + (" (not visible)" if not h.visible else "") + (f" — {h.issues}" if h.issues else "")
-                for h in s.hands
-                if h.description or h.issues
+    a = s.anatomy
+    abits = [x for x in (a.body_type, a.proportions, a.visible_musculature, a.notes) if x]
+    if abits:
+        clauses.append("Body: " + "; ".join(abits))
+
+    if s.hands:
+        hb = "; ".join(
+            (h.description + (" (hidden)" if not h.visible else "") + (f" — {h.issues}" if h.issues else "")).strip()
+            for h in s.hands
+            if (h.description or h.issues)
+        )
+        if hb:
+            clauses.append("Hands: " + hb)
+
+    f = s.face
+    fbits = [x for x in (f.age_apparent, f.expression, f.gaze_direction, f.makeup, f.facial_hair, f.distinctive_features) if x]
+    if fbits:
+        clauses.append("Face: " + "; ".join(fbits))
+
+    h = s.hair
+    hbits = [x for x in (h.length, h.style, h.color, h.texture) if x]
+    if hbits:
+        clauses.append("Hair: " + "; ".join(hbits))
+
+    sk = s.skin
+    skbits = [x for x in (sk.tone, sk.texture, sk.lighting_interaction) if x]
+    if skbits:
+        clauses.append("Skin: " + "; ".join(skbits))
+
+    for w in s.wardrobe:
+        wb = " ".join(
+            p
+            for p in (
+                w.name,
+                f"material {w.material}" if w.material else "",
+                f"color {w.color}" if w.color else "",
+                f"pattern {w.pattern}" if w.pattern else "",
+                f"fit {w.fit}" if w.fit else "",
+                w.details,
             )
-            if hb:
-                _add(out, 1, f"{label} hands: {hb}.")
+            if p
+        )
+        if wb.strip():
+            clauses.append("Wardrobe: " + wb.strip())
 
-        f = s.face
-        fbits = [
-            x
-            for x in (
-                f.age_apparent,
-                f.expression,
-                f.gaze_direction,
-                f.makeup,
-                f.facial_hair,
-                f.distinctive_features,
-            )
-            if x
-        ]
-        if fbits:
-            _add(out, f.priority, f"{label} face: {'; '.join(fbits)}.")
+    for acc in s.accessories:
+        if acc.text.strip():
+            clauses.append("Accessory: " + acc.text.strip())
 
-        h = s.hair
-        hbits = [x for x in (h.length, h.style, h.color, h.texture) if x]
-        if hbits:
-            _add(out, h.priority, f"{label} hair: {'; '.join(hbits)}.")
+    if s.notes.text.strip():
+        clauses.append("Notes: " + s.notes.text.strip())
 
-        sk = s.skin
-        skbits = [x for x in (sk.tone, sk.texture, sk.lighting_interaction) if x]
-        if skbits:
-            _add(out, sk.priority, f"{label} skin: {'; '.join(skbits)}.")
-
-        for w in s.wardrobe:
-            wb = " ".join(
-                p
-                for p in (
-                    w.name,
-                    f"material {w.material}" if w.material else "",
-                    f"color {w.color}" if w.color else "",
-                    f"pattern {w.pattern}" if w.pattern else "",
-                    f"fit {w.fit}" if w.fit else "",
-                    w.details,
-                )
-                if p
-            )
-            if wb.strip():
-                _add(out, w.priority, f"{label} wardrobe: {wb.strip()}.")
-
-        for acc in s.accessories:
-            if acc.text.strip():
-                _add(out, acc.priority, f"{label} accessory: {acc.text.strip()}.")
-
-        if s.notes.text.strip():
-            _add(out, s.notes.priority, f"{label} notes: {s.notes.text.strip()}.")
-
-    return out
+    if not clauses:
+        return ""
+    return f"{label}: " + " ".join(clauses) + "."
 
 
-def _global_sections(schema: VisionSchema) -> list[tuple[int, str]]:
-    sec: list[tuple[int, str]] = []
-    for line in schema.reproduction_critical:
-        if line.strip():
-            _add(sec, 1, f"Must preserve: {line.strip()}.")
-    if schema.image_summary.strip():
-        _add(sec, 2, schema.image_summary.strip())
-
-    nh = schema.non_human_primary.text.strip()
-    if nh:
-        _add(sec, schema.non_human_primary.priority, f"Non-human primary focus: {nh}")
-
+def _scene_camera_chunk(schema: VisionSchema) -> str:
     c = schema.composition
+    cam = schema.camera
+    parts: list[str] = []
     cb = [
         x
         for x in (
-            c.framing,
+            c.shot_scale and f"shot scale {c.shot_scale}",
+            c.framing and f"crop {c.framing}",
             c.camera_height,
-            c.angle,
+            c.angle and f"camera angle {c.angle}",
             c.subject_placement,
             c.negative_space,
             c.leading_lines,
-            c.aspect_ratio_hint,
+            c.aspect_ratio_hint and f"aspect {c.aspect_ratio_hint}",
         )
         if x
     ]
     if cb:
-        _add(sec, c.priority, "Composition: " + "; ".join(cb) + ".")
-
-    cam = schema.camera
+        parts.append("Composition: " + "; ".join(cb))
     camb = [
         x
         for x in (
-            cam.estimated_focal_length_mm and f"~{cam.estimated_focal_length_mm}mm lens feel",
+            cam.estimated_focal_length_mm and f"~{cam.estimated_focal_length_mm}mm lens",
             cam.aperture_f_stop and f"f/{cam.aperture_f_stop}",
             cam.depth_of_field,
             cam.bokeh,
@@ -161,8 +141,33 @@ def _global_sections(schema: VisionSchema) -> list[tuple[int, str]]:
         if x
     ]
     if camb:
-        _add(sec, cam.priority, "Camera/optics: " + "; ".join(camb) + ".")
+        parts.append("Optics: " + "; ".join(camb))
+    if not parts:
+        return ""
+    return " ".join(parts) + "."
 
+
+def _environment_chunk(schema: VisionSchema) -> str:
+    e = schema.environment
+    bits: list[str] = []
+    if e.location_type:
+        bits.append(f"place type {e.location_type}")
+    if (e.weather_sky or "").strip():
+        bits.append(e.weather_sky.strip())
+    if e.set_description:
+        bits.append(e.set_description.strip())
+    if e.depth_layers:
+        bits.append(f"depth {e.depth_layers}")
+    if e.background_busyness:
+        bits.append(e.background_busyness)
+    if e.props:
+        bits.append("props " + ", ".join(e.props))
+    if not bits:
+        return ""
+    return "Scene: " + "; ".join(bits) + "."
+
+
+def _lighting_color_chunk(schema: VisionSchema) -> str:
     L = schema.lighting
     lb = [
         x
@@ -178,49 +183,89 @@ def _global_sections(schema: VisionSchema) -> list[tuple[int, str]]:
         )
         if x
     ]
-    if lb:
-        _add(sec, L.priority, "Lighting: " + "; ".join(lb) + ".")
-
     cg = schema.color_grade
     cgb = [x for x in (cg.palette, cg.saturation, cg.contrast_curve, cg.split_toning, cg.film_stock_or_lut_hint) if x]
+    parts: list[str] = []
+    if lb:
+        parts.append("Light: " + "; ".join(lb))
     if cgb:
-        _add(sec, cg.priority, "Color grade: " + "; ".join(cgb) + ".")
+        parts.append("Color: " + "; ".join(cgb))
+    if not parts:
+        return ""
+    return " ".join(parts) + "."
 
+
+def _realism_chunk(schema: VisionSchema) -> str:
     r = schema.realism
     rb = [
         x
-        for x in (r.grain, r.motion_blur, r.micro_asymmetry, r.skin_imperfections, r.fabric_wrinkles_dust_wear, r.optical_imperfections)
+        for x in (
+            r.grain,
+            r.motion_blur,
+            r.micro_asymmetry,
+            r.skin_imperfections,
+            r.fabric_wrinkles_dust_wear,
+            r.optical_imperfections,
+        )
         if x
     ]
-    if rb:
-        _add(sec, r.priority, "Real-world imperfections: " + "; ".join(rb) + ".")
+    if not rb:
+        return ""
+    return "Imperfections: " + "; ".join(rb) + "."
 
-    e = schema.environment
-    eb = [e.location_type, e.set_description, e.background_busyness, e.depth_layers]
-    if e.props:
-        eb.append("props: " + ", ".join(e.props))
-    eb = [x for x in eb if x]
-    if eb:
-        _add(sec, e.priority, "Environment: " + "; ".join(eb) + ".")
 
-    if schema.mood.text.strip():
-        _add(sec, schema.mood.priority, f"Mood: {schema.mood.text.strip()}.")
+def _narrative_chunks(schema: VisionSchema) -> list[str]:
+    """Ordered chunks; later chunks are dropped first when over token budget."""
+    out: list[str] = []
+
+    r = _reproduction_chunk(schema)
+    if r:
+        out.append(r)
+
+    for i, subj in enumerate(schema.subjects):
+        sp = _subject_paragraph(subj, i)
+        if sp:
+            out.append(sp)
+
+    sc = _scene_camera_chunk(schema)
+    if sc:
+        out.append(sc)
+
+    env = _environment_chunk(schema)
+    if env:
+        out.append(env)
+
+    lc = _lighting_color_chunk(schema)
+    if lc:
+        out.append(lc)
+
+    rm = _realism_chunk(schema)
+    if rm:
+        out.append(rm)
+
+    nh = (schema.non_human_primary.text or "").strip()
+    if nh:
+        out.append(f"Primary non-person detail: {nh}")
 
     if schema.era_or_style.strip():
-        _add(sec, 7, f"Era/style cue: {schema.era_or_style.strip()}.")
+        out.append(f"Era/style: {schema.era_or_style.strip()}.")
 
     if schema.medium != "unknown":
-        _add(sec, 8, f"Medium read: {schema.medium}.")
+        out.append(f"Medium: {schema.medium}.")
 
-    return sec
+    if schema.image_summary.strip():
+        out.append(schema.image_summary.strip())
+
+    if schema.mood.text.strip():
+        out.append(f"Mood: {schema.mood.text.strip()}.")
+
+    return [x.strip() for x in out if x.strip()]
 
 
-def _fit_token_budget(parts: list[tuple[int, str]], max_tokens: int, tokenizer_model_id: str) -> str:
-    # Sort: low priority number first (more important), drop from end (least important)
-    parts = sorted(parts, key=lambda x: (x[0], x[1]))
-    work = parts[:]
+def _fit_chunks(chunks: list[str], max_tokens: int, tokenizer_model_id: str) -> str:
+    work = chunks[:]
     while work:
-        text = " ".join(p[1] for p in work).strip()
+        text = " ".join(work).strip()
         if _tokutil.count_tokens(text, tokenizer_model_id) <= max_tokens:
             return text
         work.pop()
@@ -252,11 +297,8 @@ def compile_zimage_prompt(
     tokenizer_model_id: str = "Qwen/Qwen3-4B",
 ) -> CompiledPrompt:
     pr = get_preset(preset)
-    sections: list[tuple[int, str]] = []
-    sections.extend(_global_sections(schema))
-    sections.extend(_subject_sections(schema))
-
-    body = _fit_token_budget(sections, max_tokens=max_tokens, tokenizer_model_id=tokenizer_model_id)
+    chunks = _narrative_chunks(schema)
+    body = _fit_chunks(chunks, max_tokens=max_tokens, tokenizer_model_id=tokenizer_model_id)
     if not body.strip():
         body = schema.image_summary.strip() or "Photoreal reproduction of the reference scene and subjects."
         body = _truncate_words(body, max_tokens, tokenizer_model_id)
@@ -266,7 +308,6 @@ def compile_zimage_prompt(
 
     positive = (pr.positive_prefix + body + pr.positive_suffix).strip()
     positive = naturalize(positive)
-    # Final safety truncate including prefix/suffix
     while _tokutil.count_tokens(positive, tokenizer_model_id) > max_tokens and positive:
         positive = _truncate_words(positive, max_tokens, tokenizer_model_id)
 

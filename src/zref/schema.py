@@ -85,6 +85,8 @@ class PoseDetail(BaseModel):
     feet: str = ""
     weight_distribution: str = ""
     interaction_with_environment: str = ""
+    # Explicit left/right limb + contact points (reduces wrong-limb generations)
+    arms_hands_lr: str = ""
     priority: Priority = 1
 
 
@@ -151,11 +153,12 @@ class ColorGrade(BaseModel):
 class EnvironmentDetail(BaseModel):
     model_config = ConfigDict(extra="forbid")
     location_type: str = ""  # indoor studio, street, home, etc.
+    weather_sky: str = ""  # clear / overcast, sun position read, haze
     set_description: str = ""
     props: list[str] = Field(default_factory=list)
     background_busyness: str = ""
     depth_layers: str = ""  # foreground/mid/background
-    priority: Priority = 6
+    priority: Priority = 4
 
 
 class RealismCues(BaseModel):
@@ -173,6 +176,7 @@ class RealismCues(BaseModel):
 
 class CompositionDetail(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    shot_scale: str = ""  # e.g. medium full shot, head-and-shoulders, where frame crops
     framing: str = ""  # full body, waist-up, close-up
     camera_height: str = ""
     angle: str = ""  # eye level, low, high
