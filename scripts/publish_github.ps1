@@ -40,8 +40,13 @@ $headers = @{
 
 # Verify token and (for user repos) login matches Owner
 $me = Invoke-RestMethod -Uri "https://api.github.com/user" -Headers $headers -Method Get
-if (-not $IsOrg -and $me.login -ne $Owner) {
-  Write-Warning "Authenticated as '$($me.login)' but -Owner is '$Owner'. Repos created with /user/repos go under $($me.login). Use -Owner $($me.login) or an org token with -IsOrg."
+if ($IsOrg) {
+  $repoOwner = $Owner
+} else {
+  $repoOwner = $me.login
+  if ($Owner -ne $me.login) {
+    Write-Warning "Ignoring -Owner '$Owner': authenticated as '$($me.login)'. Repo will be $($me.login)/$RepoName"
+  }
 }
 
 $bodyObj = @{
@@ -60,7 +65,7 @@ $createUri = if ($IsOrg) {
 
 try {
   $null = Invoke-RestMethod -Uri $createUri -Headers $headers -Method Post -Body $body -ContentType "application/json"
-  Write-Host "Created: https://github.com/$Owner/$RepoName"
+  Write-Host "Created: https://github.com/$repoOwner/$RepoName"
 } catch {
   if ($_.Exception.Response.StatusCode.value__ -eq 422) {
     Write-Host "Repo may already exist (422). Continuing with remote + push."
@@ -69,7 +74,7 @@ try {
   }
 }
 
-$remoteUrl = "https://github.com/$Owner/$RepoName.git"
+$remoteUrl = "https://github.com/$repoOwner/$RepoName.git"
 git remote remove origin 2>$null
 git remote add origin $remoteUrl
 Write-Host "Remote origin -> $remoteUrl"
@@ -78,4 +83,4 @@ $branch = git branch --show-current
 if (-not $branch) { $branch = "main" }
 
 git push -u origin $branch
-Write-Host "Done. Open: https://github.com/$Owner/$RepoName"
+Write-Host "Done. Open: https://github.com/$repoOwner/$RepoName"
