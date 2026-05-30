@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import io
 import json
 from typing import Any
@@ -22,6 +23,19 @@ except ImportError as e:  # pragma: no cover - ComfyUI runtime
     _IMPORT_ERROR = e
 else:
     _IMPORT_ERROR = None
+
+
+def _run_async_from_comfy(coro):
+    """ComfyUI already runs inside an asyncio loop; asyncio.run() is invalid there.
+
+    Run the coroutine in a worker thread with its own fresh event loop.
+    """
+
+    def _worker():
+        return asyncio.run(coro)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(_worker).result(timeout=900)
 
 
 def _tensor_to_jpeg_bytes(image: Any) -> tuple[bytes, str]:
@@ -110,7 +124,7 @@ class ZRefDescribeImage:
             cache_dir=cache_dir,
         )
         prov: ProviderName | None = provider  # type: ignore[assignment]
-        res = asyncio.run(
+        res = _run_async_from_comfy(
             describe_image(
                 data,
                 mime,
