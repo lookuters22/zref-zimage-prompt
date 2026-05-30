@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+out/
+.cache/
+
+# Unrelated local ComfyUI checkouts / docs (keep this repo zref-only)
+ComfyUI-*/
+*.docx
