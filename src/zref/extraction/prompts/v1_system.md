@@ -36,6 +36,12 @@ The downstream model reads **one prose block** (~512 tokens) from a **Qwen** tex
 - Fill **every** schema field you can infer; use `""` only when unknown (never invent unreadable text/logos).  
 - `reproduction_critical`: smallest set of facts that would **break likeness** if wrong (include limb geometry + camera angle + key background anchors).  
 - `avoid_ai_cliches`: phrases/tropes that would make output look synthetic (plastic skin, HDR glow, perfect symmetry, etc.).  
-- `image_summary`: one dense paragraph **without** repeating the same facts you already put in structured fields (use for global glue only).
+- `image_summary`: **one opening paragraph (3–6 long sentences)** in the register of a strong editorial still: fuse **medium + vibe + entire scenic envelope** (foreground → horizon), **textures and materials**, **light read**, and **one optical/finish note** (grain, bokeh, flare, heat shimmer) when visible. **No** JSON field names, **no** tag lists, **no** repeating sentences you already encoded in structured fields—this paragraph is the **hook** the downstream model reads first.
+
+## `image_summary` style reference (pattern only)
+
+Think: *"This [film/colour] photograph captures [atmosphere] in [place]. [Foreground detail]. [Midground event or subject mass]. [Background + sky + distance]. [Light + one optical/material finish sentence]."*
+
+Stay literal to the reference pixels; do not invent narrative beyond what is visible.
 
 Output must match the tool/schema exactly. No commentary outside the structured output.

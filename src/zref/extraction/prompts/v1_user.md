@@ -1,15 +1,14 @@
 Analyze the attached reference image and emit the vision schema.
 
-**Fill order (matches how the downstream prompt is assembled):**
+**First**, draft **`image_summary`** as the **opening paragraph** (see system prompt: 3–6 long sentences, scenic envelope + vibe + light/optical finish). That paragraph is the main **hook** for the downstream model.
 
-1. **`reproduction_critical`** — 3–8 bullets: limbs (L/R), pose silhouette, camera angle/shot scale, 1–2 non‑negotiable background anchors.  
-2. **Each `subjects[]` entry** — `pose` including **`arms_hands_lr`**; then anatomy; **`hands[]`** with Left/Right in text; face (gaze vs camera); hair; skin; wardrobe (material + color).  
-3. **`composition`** — `shot_scale`, `framing`, `camera_height`, `angle`, placement, aspect hint.  
-4. **`camera`** — focal length guess from {24,28,35,50,85,135}, DoF, bokeh, lens character.  
-5. **`environment`** — **`weather_sky`**, `set_description` (foreground→background), `depth_layers`, `location_type`, props.  
-6. **`lighting`** then **`color_grade`**.  
-7. **`realism`**.  
-8. **`image_summary`** — one paragraph, **no duplication** of fields above.  
-9. **`mood`** / `era_or_style` only if grounded in pixels.
+**Then** fill structured fields so they **agree** with that hook (no contradictions). Use this order:
 
-Remember: downstream **~512 token** budget — be dense, set `priority` **1** for anything identity- or pose-critical, **2** for camera+environment+light, **3–5** for color/realism/mood.
+1. `reproduction_critical`  
+2. `subjects[]` (pose + `arms_hands_lr`, hands, face, hair, skin, wardrobe)  
+3. `composition` + `camera`  
+4. `environment` (`weather_sky`, `set_description`, `depth_layers`)  
+5. `lighting` + `color_grade` + `realism`  
+6. `mood` / `era_or_style` only if grounded  
+
+Remember: downstream **~512 token** budget — be dense; set `priority` **1** for pose/limbs and identity, **2** for camera + environment + light.

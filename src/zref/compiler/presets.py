@@ -21,8 +21,8 @@ PRESETS: dict[str, Preset] = {
     "default": Preset(
         name="default",
         system_prompt="",
-        positive_prefix="Photograph. ",
-        positive_suffix=" Natural photographic imperfections; believable optics and materials.",
+        positive_prefix="",
+        positive_suffix=" Natural photographic imperfections; believable optics, atmosphere, and material response.",
         negative="illustration, vector, 3D render, oversharpened, plastic skin, waxy skin, CGI",
     ),
     "editorial": Preset(
