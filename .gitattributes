@@ -1,0 +1,8 @@
+# Always check out shell scripts with LF so they run on Linux (RunPod) even
+# when committed from Windows.
+*.sh text eol=lf
+scripts/*.sh text eol=lf
+
+# Sensible defaults
+*.py text eol=lf
+*.md text
