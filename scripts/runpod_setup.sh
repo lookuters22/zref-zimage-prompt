@@ -19,6 +19,21 @@ ZREF_DEPS="${ZREF_DEPS:-/workspace/zref_deps}"
 COMFY_DIR="${COMFY_DIR:-/workspace/runpod-slim/ComfyUI}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Pick a Python interpreter. Many containers ship only `python3`.
+# Override with: PYTHON=/path/to/comfyui/python bash scripts/runpod_setup.sh
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "[zref] ERROR: no python/python3 on PATH. Set PYTHON=/path/to/python and re-run." >&2
+    exit 1
+  fi
+fi
+
+echo "[zref] python:      $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1))"
 echo "[zref] repo:        $REPO_DIR"
 echo "[zref] deps target: $ZREF_DEPS"
 echo "[zref] comfy dir:   $COMFY_DIR"
@@ -31,8 +46,8 @@ fi
 # --- 1. install zref + all deps into the persistent volume ------------------
 mkdir -p "$ZREF_DEPS"
 echo "[zref] installing into persistent volume (this can take a few minutes the first time)..."
-python -m pip install --upgrade pip >/dev/null 2>&1 || true
-python -m pip install --target "$ZREF_DEPS" "$REPO_DIR"
+"$PYTHON_BIN" -m pip install --upgrade pip >/dev/null 2>&1 || true
+"$PYTHON_BIN" -m pip install --target "$ZREF_DEPS" "$REPO_DIR"
 
 # --- 2. link the ComfyUI node into custom_nodes -----------------------------
 if [[ -d "$COMFY_DIR/custom_nodes" ]]; then
@@ -50,7 +65,7 @@ fi
 
 # --- 3. verify --------------------------------------------------------------
 echo "[zref] verifying import..."
-PYTHONPATH="$ZREF_DEPS:${PYTHONPATH:-}" python -c "import zref; print('[zref] OK ->', zref.__file__)"
+PYTHONPATH="$ZREF_DEPS:${PYTHONPATH:-}" "$PYTHON_BIN" -c "import zref; print('[zref] OK ->', zref.__file__)"
 
 cat <<EOF
 
